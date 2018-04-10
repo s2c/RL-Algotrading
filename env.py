@@ -10,8 +10,8 @@ Rewards: Total Return at end of episode
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-import gym
-# import tgym
+# import gym
+import tgym
 # from autoencoder import autoencoder
 
 plt.style.use('dark_background')
@@ -24,8 +24,7 @@ mpl.rcParams.update(
     }
 )
 
-
-class TradingEnv(gym.Env):
+class TradingEnv(tgym.Env):
     """
     Sublcass of openAI's gym.env. Used to create the right environment
     """
