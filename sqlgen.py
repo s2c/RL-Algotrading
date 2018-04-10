@@ -40,7 +40,7 @@ class SQLStreamer(tgym.DataGenerator):
         yields numpy array containing price from this iteratons
         """
     @staticmethod
-    def _generator(configFile='config.json', numDays=3, YearBegin=2013, YearEnd=2017, scrip='RELIANCE'):
+    def _generator(configFile='config.json', numDays=3, YearBegin=2014, YearEnd=2017, scrip='RELIANCE'):
         """
         Connects to a postgres database and then
         iterates over a pandas dataframe to return the close price
@@ -71,7 +71,7 @@ class SQLStreamer(tgym.DataGenerator):
     def _iterator_end(self):
         """Rewinds if end of data reached.
         """
-        print "End of data reached, rewinding."
+        print ("End of data reached, rewinding.")
         super(self.__class__, self).rewind()
 
     def rewind(self):

@@ -30,15 +30,15 @@ class TradingEnv(tgym.Env):
     Sublcass of openAI's gym.env. Used to create the right environment
     """
     _actions = {
-        'hold': np.array([1, 0, 0]),
-        'buy': np.array([0, 1, 0]),
-        'sell': np.array([0, 0, 1])
+        'sell': np.array([1, 0, 0]),
+        'hold': np.array([0, 1, 0]),
+        'buy': np.array([0, 0, 1])
     }
 
     _positions = {
-        'flat': np.array([1, 0, 0]),
-        'long': np.array([0, 1, 0]),
-        'short': np.array([0, 0, 1])
+        'short': np.array([1, 0, 0]),
+        'flat': np.array([0, 1, 0]),
+        'long': np.array([0, 0, 1])
     }
 
     def __init__(self, data_generator,
@@ -115,8 +115,9 @@ class TradingEnv(tgym.Env):
                 - done (bool): Whether the episode has ended, in which case further step() calls will return undefined results.
                 - info (dict): Contains auxiliary diagnostic information (helpful for debugging, and sometimes learning).
         """
-        assert action.lower() in self._actions  # make sure it is a valid action
-        action = action.lower()
+        # assert action.lower() in self._actions  # make sure it is a valid action
+        # action = action.lower()
+        assert len(action) == 3
         self._action = action
         self._iteration += 1
         done = False
@@ -125,7 +126,7 @@ class TradingEnv(tgym.Env):
         info = {}
 
         # if we are to go long and ...
-        if all(self._actions[action] == self._actions['buy']):
+        if all(action == self._actions['buy']):
 
             # if we currently have nothing in hand
             if all(self._position == self._positions['flat']):
@@ -143,7 +144,7 @@ class TradingEnv(tgym.Env):
                 self._entry_price = 0  # and our entry price resets to 0
 
         # if we are going short and ...
-        elif all(self._actions[action] == self._actions['sell']):
+        elif all(action == self._actions['sell']):
 
             # if we currently have nothing in hand
             if all(self._position == self._positions['flat']):
@@ -189,7 +190,7 @@ class TradingEnv(tgym.Env):
     def _handle_close(self, evt):
             self._closed_plot = True
 
-    def render(self, savefig=False, filename='myfig'):
+    def render(self, savefig=True, filename='myfig'):
         """Matlplotlib rendering of each step.
         Args:
             savefig (bool): Whether to save the figure as an image or not.
@@ -226,10 +227,10 @@ class TradingEnv(tgym.Env):
                           [ask, ask], color='white')
         ymin, ymax = self._ax[-1].get_ylim()
         yrange = ymax - ymin
-        if (self._action == self._actions['sell']).all():
+        if all(self._action == self._actions['sell']):
             self._ax[-1].scatter(self._iteration + 0.5, bid + 0.03 *
                                  yrange, color='lawngreen', marker='v')
-        elif (self._action == self._actions['buy']).all():
+        elif all(self._action == self._actions['buy']):
             self._ax[-1].scatter(self._iteration + 0.5, ask - 0.03 *
                                  yrange, color='orangered', marker='^')
         plt.suptitle('Cumulated Reward: ' + "%.2f" % self._total_reward + ' ~ ' +
@@ -244,15 +245,16 @@ class TradingEnv(tgym.Env):
         if savefig:
             plt.savefig(filename)
 
-        def _get_observation(self):
-            """Concatenate all necessary elements to create the observation.
-            Returns:
-                numpy.array: observation array.
-            """
-            return np.concatenate(
-                [prices for prices in self._prices_history[-self._history_length:]] +
-                [
-                    np.array([self._entry_price]),
-                    np.array(self._position)
-                ]
-            )
+    def _get_observation(self):
+        """Concatenate all necessary elements to create the observation.
+        Returns:
+            numpy.array: observation array.
+        """
+        prices = self._prices_history[-self._history_length:]
+        # print(prices)
+        # print(self._position)
+        # print(self._entry_price)
+
+        return np.concatenate((np.array(prices),
+                              [self._entry_price],
+                              self._position))
