@@ -24,6 +24,7 @@ mpl.rcParams.update(
     }
 )
 
+
 class TradingEnv(tgym.Env):
     """
     Sublcass of openAI's gym.env. Used to create the right environment
@@ -53,7 +54,7 @@ class TradingEnv(tgym.Env):
         data_generator: self explanatory. Generates data for the
         environment of type DataGenerator
         holdings: All current holdings
-        episode_length: number of steps to use.
+        episode_length: number of steps to use, in minutes
                 TODO: Figure out optimal number of steps
         trading_fee: % fee for trading
         time_fee: Fee for holding for too long
