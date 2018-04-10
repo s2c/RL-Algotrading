@@ -25,8 +25,9 @@ wheels/
 .installed.cfg
 *.egg
 tgym.py
-.png
-.ipynb
+*.png
+*.ipynb
+*.json
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
