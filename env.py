@@ -138,7 +138,7 @@ class TradingEnv(tgym.Env):
             elif all(self._position == self._positions['short']):
                 # We exit at the last closing price
                 self._exit_price = self._prices_history[-1]
-                instant_pnl = (self._entry_price - self._exit_price) - \
+                instant_pnl = (self._pos_size * (self._entry_price - self._exit_price)) - \
                     (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price))  # pnl is just entry-exit-transaction costs
                 self._position = self._positions['flat']  # our position is now flat because we no longer hold anything
                 self._entry_price = 0  # and our entry price resets to 0
@@ -156,7 +156,7 @@ class TradingEnv(tgym.Env):
             elif all(self._position == self._positions['long']):
                 # We exit at the last closing price
                 self._exit_price = self._prices_history[-1]
-                instant_pnl = (self._entry_price - self._exit_price) - \
+                instant_pnl = (self._pos_size * (self._entry_price - self._exit_price)) - \
                     (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price))  # pnl is just entry-exit-transaction costs
                 # our position is now flat because we no longer hold anything
                 self._position = self._positions['flat']
@@ -190,7 +190,7 @@ class TradingEnv(tgym.Env):
     def _handle_close(self, evt):
             self._closed_plot = True
 
-    def render(self, savefig=True, filename='myfig'):
+    def render(self, savefig=False, filename='myfig'):
         """Matlplotlib rendering of each step.
         Args:
             savefig (bool): Whether to save the figure as an image or not.
@@ -229,10 +229,10 @@ class TradingEnv(tgym.Env):
         yrange = ymax - ymin
         if all(self._action == self._actions['sell']):
             self._ax[-1].scatter(self._iteration + 0.5, bid + 0.03 *
-                                 yrange, color='lawngreen', marker='v')
+                                 yrange, color='orangered', marker='v')
         elif all(self._action == self._actions['buy']):
             self._ax[-1].scatter(self._iteration + 0.5, ask - 0.03 *
-                                 yrange, color='orangered', marker='^')
+                                 yrange, color='lawngreen', marker='^')
         plt.suptitle('Cumulated Reward: ' + "%.2f" % self._total_reward + ' ~ ' +
                      'Cumulated PnL: ' + "%.2f" % self._total_pnl + ' ~ ' +
                      'Position: ' + ['flat', 'long', 'short'][list(self._position).index(1)] + ' ~ ' +

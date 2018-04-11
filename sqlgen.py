@@ -46,7 +46,11 @@ class SQLStreamer(tgym.DataGenerator):
         iterates over a pandas dataframe to return the close price
         Might miss the point of using generators
         """
-        start, end = randDates(start=2014, end=2017, days=numDays)
+        start, end = randDates(start=YearBegin, end=YearEnd, days=numDays)
+        print("start Date")
+        print(start)
+        print("end Date")
+        print(end)
         address = json.load(open('config.json'))['DB']['ADDRESS']
         engine = sqlalchemy.create_engine(address)
         query = "SELECT * FROM histdata \
