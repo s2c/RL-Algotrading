@@ -1,23 +1,33 @@
 import random
-
+import gym
 import numpy as np
-from keras.layers import Dense
-from keras.models import Sequential
-from keras.optimizers import Adam
 from collections import deque
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+from keras import backend as K
+
+EPISODES = 5000
 
 
-class DQNAgent:
+class DDQNAgent:
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
         self.gamma = 0.95    # discount rate
         self.epsilon = 1.0  # exploration rate
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
+        self.epsilon_min = 0.0 # 5 % of the time the guess is random
+        self.epsilon_decay = 0.999
         self.learning_rate = 0.001
         self.model = self._build_model()
+        self.target_model = self._build_model()
+        self.update_target_model()
+
+    def _huber_loss(self, target, prediction):
+        # sqrt(1+error^2)-1
+        error = prediction - target
+        return K.mean(K.sqrt(1 + K.square(error)) - 1, axis=-1)
 
     def _build_model(self):
         # Neural Net for Deep-Q learning Model
@@ -25,10 +35,13 @@ class DQNAgent:
         model.add(Dense(24, input_dim=self.state_size, activation='relu'))
         model.add(Dense(24, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
-        # model.summary()
-        model.compile(loss='mse',
+        model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
         return model
+
+    def update_target_model(self):
+        # copy weights from model to target_model
+        self.target_model.set_weights(self.model.get_weights())
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
@@ -36,27 +49,28 @@ class DQNAgent:
     def act(self, state):
         action = np.zeros(self.action_size)
         if np.random.rand() <= self.epsilon:
-            # print("randomed")
+            print("random_decision")
             act_values = random.randrange(self.action_size)
             action[act_values] = 1
             return action
-        act_values = self.model.predict(state.reshape((1,-1)))
-        # print(act_values)
+        act_values = self.model.predict(state.reshape((1, -1)))
         action[np.argmax(act_values[0])] = 1
-        return action
+        return action  # returns action
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
-            target = reward
-            if not done:
-                target = (reward + self.gamma *
-                          np.amax(self.model.predict(next_state)[0]))
-            target_f = self.model.predict(state)
-            # print(target_f)
+            target = self.model.predict(state)
             action = np.argmax(action)
-            target_f[0][action] = target
-            self.model.fit(state, target_f, epochs=1, verbose=0)
+            if done:
+                target[0][action] = reward
+            else:
+                # a = self.model.predict(next_state)[0]
+                t = self.target_model.predict(next_state)[0]
+                # print(t)
+                target[0][action] = reward + self.gamma * np.amax(t)
+            # print(reward)
+            self.model.fit(state, target, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 

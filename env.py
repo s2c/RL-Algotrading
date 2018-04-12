@@ -95,12 +95,14 @@ class TradingEnv(tgym.Env):
         self._closed_plot = False
         self._holding_position = []
 
-        for i in range(self._history_length):
-            self._prices_history.append(next(self._data_generator))
-
-        observation = self._get_observation()
-        self.state_shape = observation.shape
-        self._action = self._actions['hold']
+        try:
+            for i in range(self._history_length):
+                self._prices_history.append(next(self._data_generator))
+            observation = self._get_observation()
+            self.state_shape = observation.shape
+            self._action = self._actions['hold']
+        except:  # Tries another reset if this one fails
+            observation = self.reset()
 
         return observation
 
@@ -124,7 +126,7 @@ class TradingEnv(tgym.Env):
         instant_pnl = 0  # pnl in this round
         reward = 0  # reward this round
         info = {}
-
+        # Consistent negative reward unless actively worked towards
         # if we are to go long and ...
         if all(action == self._actions['buy']):
 
@@ -142,6 +144,8 @@ class TradingEnv(tgym.Env):
                     (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price))  # pnl is just entry-exit-transaction costs
                 self._position = self._positions['flat']  # our position is now flat because we no longer hold anything
                 self._entry_price = 0  # and our entry price resets to 0
+            else:  # if we are already long
+                reward -= self._entry_price*self._pos_size*0.001 # dont want to hold for too long
 
         # if we are going short and ...
         elif all(action == self._actions['sell']):
@@ -161,12 +165,16 @@ class TradingEnv(tgym.Env):
                 # our position is now flat because we no longer hold anything
                 self._position = self._positions['flat']
                 self._entry_price = 0  # and our entry price resets to 0
+            else:  # if we are already short
+                reward -= self._entry_price*self._pos_size*0.001
 
-        else:  # no decision by the brain
-
+        elif all(action == self._actions['hold']):  # hold decision
             # If we are currently short or long
             if all(self._position == self._positions['long']) or all(self._position == self._positions['short']):
                 reward -= self._time_fee * self._pos_size * self._entry_price        # Punish for holding too long
+            else:
+                self._position = self._positions['flat']
+                reward -= 1
 
         reward += instant_pnl  # reward is just profit added. Might change to percent profit
         self._total_pnl += instant_pnl  # Total pnl update
@@ -188,7 +196,7 @@ class TradingEnv(tgym.Env):
         return observation, reward, done, info
 
     def _handle_close(self, evt):
-            self._closed_plot = True
+        self._closed_plot = True
 
     def render(self, savefig=False, filename='myfig'):
         """Matlplotlib rendering of each step.
@@ -227,15 +235,21 @@ class TradingEnv(tgym.Env):
                           [ask, ask], color='white')
         ymin, ymax = self._ax[-1].get_ylim()
         yrange = ymax - ymin
-        if all(self._action == self._actions['sell']):
+        # print("ACTION:")
+        # print(self._action)
+        # print("POSITION:")
+        # print(self._position)
+        if all(self._action == self._actions['sell']):  # and all(self._position != self._positions['short']):
             self._ax[-1].scatter(self._iteration + 0.5, bid + 0.03 *
                                  yrange, color='orangered', marker='v')
-        elif all(self._action == self._actions['buy']):
+        elif all(self._action == self._actions['buy']):  # and all(self._position != self._positions['long']):
             self._ax[-1].scatter(self._iteration + 0.5, ask - 0.03 *
                                  yrange, color='lawngreen', marker='^')
+        elif all(self._action == self._actions['hold']):
+            pass
         plt.suptitle('Cumulated Reward: ' + "%.2f" % self._total_reward + ' ~ ' +
                      'Cumulated PnL: ' + "%.2f" % self._total_pnl + ' ~ ' +
-                     'Position: ' + ['flat', 'long', 'short'][list(self._position).index(1)] + ' ~ ' +
+                     'Position: ' + ['short', 'flat', 'long'][list(self._position).index(1)] + ' ~ ' +
                      'Entry Price: ' + "%.2f" % self._entry_price)
         self._f.tight_layout()
         plt.xticks(range(self._iteration)[::5])
@@ -256,5 +270,5 @@ class TradingEnv(tgym.Env):
         # print(self._entry_price)
 
         return np.concatenate((np.array(prices),
-                              [self._entry_price],
-                              self._position))
+                               [self._entry_price],
+                               self._position))
