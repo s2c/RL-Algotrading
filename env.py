@@ -60,6 +60,7 @@ class TradingEnv(tgym.Env):
         time_fee: Fee for holding for too long
         history_length: Last t prices where t is in minutes
         pos_size: Size of position we take
+        perfect scores are benchmark scores, change their definition in step. Currently buy and hold
 
         """
         assert history_length > 0
@@ -76,6 +77,9 @@ class TradingEnv(tgym.Env):
         self._holding_position = []  # keeps track of position entry details
         self._pos_size = pos_size
         self._spread_coefficients = [pos_size]
+        self._perfect_score = 0
+        self._last_score = 0
+        self._epiCounter = 0 
 
         self.reset()
 
@@ -94,6 +98,11 @@ class TradingEnv(tgym.Env):
         self._exit_price = 0
         self._closed_plot = False
         self._holding_position = []
+        self._perfect_score = 0
+        self._last_score = 0
+        self._perfect_enter = 0
+        self._first_render = True
+        self._epiCounter += 1
 
         try:
             for i in range(self._history_length):
@@ -126,8 +135,22 @@ class TradingEnv(tgym.Env):
         instant_pnl = 0  # pnl in this round
         reward = 0  # reward this round
         info = {}
+
+        # Update the perfect scores
+        if self._perfect_enter == 0:  # make sure we enter
+            self._perfect_enter = self._prices_history[-1]
+        elif self._prices_history[-1] > self._perfect_enter:  # Always exits on profit as 0 costs
+            self._last_score = (self._pos_size*(self._prices_history[-1] - self._perfect_enter)) / (self._perfect_enter)  # percent return
+            if np.random.rand() > 0.3:  # perfect 30% of the times
+                self._perfect_score += self._last_score  # add this score to perfect scores
+            else:  # we pretend this didn't happend
+                # self._perfect_score = 0
+                self._perfect_enter = 0
+        else:
+            self._perfect_enter = 0  # otherwise don't modify perfect score and pretend we didnt enter
+
         # Consistent negative reward unless actively worked towards
-        # if we are to go long and ...
+        # if we are to go long
         if all(action == self._actions['buy']):
 
             # if we currently have nothing in hand
@@ -140,13 +163,15 @@ class TradingEnv(tgym.Env):
             elif all(self._position == self._positions['short']):
                 # We exit at the last closing price
                 self._exit_price = self._prices_history[-1]
-                instant_pnl = (self._pos_size * (self._entry_price - self._exit_price)) - \
-                    (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price))  # pnl is just entry-exit-transaction costs
+                instant_pnl = ((self._pos_size * (self._entry_price - self._exit_price)) -
+                               (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price)))  # pnl is entry-exit-transaction costs
+                # print(self._entry_price)
+                reward += instant_pnl / (self._entry_price)  # instantPNL is actually % increase
                 self._position = self._positions['flat']  # our position is now flat because we no longer hold anything
                 self._entry_price = 0  # and our entry price resets to 0
             else:  # if we are already long
-                reward -= self._entry_price*self._pos_size*0.001 # dont want to hold for too long
-
+                reward -= 0.001  # dont want to hold for too long
+                pass  # doesn't matter
         # if we are going short and ...
         elif all(action == self._actions['sell']):
 
@@ -160,23 +185,28 @@ class TradingEnv(tgym.Env):
             elif all(self._position == self._positions['long']):
                 # We exit at the last closing price
                 self._exit_price = self._prices_history[-1]
-                instant_pnl = (self._pos_size * (self._entry_price - self._exit_price)) - \
+                instant_pnl = (self._pos_size * (-self._entry_price + self._exit_price)) - \
                     (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price))  # pnl is just entry-exit-transaction costs
+                reward += instant_pnl / (self._entry_price)
                 # our position is now flat because we no longer hold anything
                 self._position = self._positions['flat']
                 self._entry_price = 0  # and our entry price resets to 0
             else:  # if we are already short
-                reward -= self._entry_price*self._pos_size*0.001
+                reward -= 0.001
+                pass  # nothing happens
 
         elif all(action == self._actions['hold']):  # hold decision
             # If we are currently short or long
-            if all(self._position == self._positions['long']) or all(self._position == self._positions['short']):
-                reward -= self._time_fee * self._pos_size * self._entry_price        # Punish for holding too long
-            else:
-                self._position = self._positions['flat']
-                reward -= 1
-
-        reward += instant_pnl  # reward is just profit added. Might change to percent profit
+            # if all(self._position == self._positions['long']) or all(self._position == self._positions['short']):
+            #     reward -= self._time_fee * self._pos_size * self._entry_price        # Punish for holding too long
+            # else:
+            #     self._position = self._positions['flat']
+            #     reward -= 1
+            reward -= 0.001  # participation penalty
+            pass  # Do nothing
+        # print(self._last_score)
+        reward -= self._last_score  # reward is just % profit minus difference from perfect strategy
+        # print(reward)
         self._total_pnl += instant_pnl  # Total pnl update
         self._total_reward += reward  # Total reward update
 
@@ -198,13 +228,17 @@ class TradingEnv(tgym.Env):
     def _handle_close(self, evt):
         self._closed_plot = True
 
-    def render(self, savefig=False, filename='myfig'):
+    def render(self, savefig=True, filename='myfig'):
         """Matlplotlib rendering of each step.
         Args:
             savefig (bool): Whether to save the figure as an image or not.
             filename (str): Name of the image file.
         """
         if self._first_render:
+            try:
+                plt.close()
+            except:
+                pass
             self._f, self._ax = plt.subplots(
                 len(self._spread_coefficients) + int(len(self._spread_coefficients) > 1),
                 sharex=True
@@ -214,6 +248,7 @@ class TradingEnv(tgym.Env):
             self._f.set_size_inches(12, 6)
             self._first_render = False
             self._f.canvas.mpl_connect('close_event', self._handle_close)
+
         # if len(self._spread_coefficients) > 1:
         #     # TODO: To be checked
         #     for prod_i in range(len(self._spread_coefficients)):
@@ -250,14 +285,15 @@ class TradingEnv(tgym.Env):
         plt.suptitle('Cumulated Reward: ' + "%.2f" % self._total_reward + ' ~ ' +
                      'Cumulated PnL: ' + "%.2f" % self._total_pnl + ' ~ ' +
                      'Position: ' + ['short', 'flat', 'long'][list(self._position).index(1)] + ' ~ ' +
-                     'Entry Price: ' + "%.2f" % self._entry_price)
+                     'Entry Price: ' + "%.2f" % self._entry_price + ' ~ \n'
+                     'Perfect Score:' + "%.2f" % self._perfect_score)
         self._f.tight_layout()
         plt.xticks(range(self._iteration)[::5])
         plt.xlim([max(0, self._iteration - 80.5), self._iteration + 0.5])
         plt.subplots_adjust(top=0.85)
         plt.pause(0.01)
         if savefig:
-            plt.savefig(filename)
+            plt.savefig(filename + str(self._epiCounter))
 
     def _get_observation(self):
         """Concatenate all necessary elements to create the observation.

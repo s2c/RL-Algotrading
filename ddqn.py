@@ -49,7 +49,7 @@ class DDQNAgent:
     def act(self, state):
         action = np.zeros(self.action_size)
         if np.random.rand() <= self.epsilon:
-            print("random_decision")
+            # print("random_decision")
             act_values = random.randrange(self.action_size)
             action[act_values] = 1
             return action
