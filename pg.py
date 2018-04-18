@@ -72,6 +72,7 @@ class A2CAgent:
             update_inputs[i, :] = self.states[i]
 
         # Prediction of state values for each state appears in the episode
+        print(update_inputs)
         values = self.critic.predict(update_inputs.reshape(episode_length, -1, 1))
 
         # Similar to one-hot target but the "1" is replaced by Advantage Function i.e. discounted_rewards R_t - Value
@@ -92,5 +93,5 @@ class A2CAgent:
         self.critic.save_weights(name + "_critic.h5", overwrite=True)
 
     def load_model(self, name):
-        self.actor.load_weights(name + "_actor.h5", overwrite=True)
-        self.critic.load_weights(name + "_critic.h5", overwrite=True)
+        self.actor.load_weights(name + "_actor.h5")
+        self.critic.load_weights(name + "_critic.h5")

@@ -29,10 +29,10 @@ K.set_session(sess)
 
 # setup the environment
 trading_fee = 0.0005
-time_fee = 0.0004
+time_fee = 0.000004
 # history_length number of historical states in the observation vector.
-history_length = 30
-episodes = 100
+history_length = 60
+episodes = 30
 episode_length = 300
 environment = env.TradingEnv(data_generator=generatorTrain,
                              episode_length=episode_length,

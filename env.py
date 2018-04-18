@@ -79,7 +79,7 @@ class TradingEnv(tgym.Env):
         self._spread_coefficients = [pos_size]
         self._perfect_score = 0
         self._last_score = 0
-        self._epiCounter = 0 
+        self._epiCounter = 0
 
         self.reset()
 
@@ -140,8 +140,8 @@ class TradingEnv(tgym.Env):
         if self._perfect_enter == 0:  # make sure we enter
             self._perfect_enter = self._prices_history[-1]
         elif self._prices_history[-1] > self._perfect_enter:  # Always exits on profit as 0 costs
-            self._last_score = (self._pos_size*(self._prices_history[-1] - self._perfect_enter)) / (self._perfect_enter)  # percent return
-            if np.random.rand() > 0.3:  # perfect 30% of the times
+            self._last_score = (self._pos_size * (self._prices_history[-1] - self._perfect_enter))  # / (self._perfect_enter)  # percent return
+            if np.random.rand() < 0.7:  # perfect 70% of the times
                 self._perfect_score += self._last_score  # add this score to perfect scores
             else:  # we pretend this didn't happend
                 # self._perfect_score = 0
@@ -166,11 +166,11 @@ class TradingEnv(tgym.Env):
                 instant_pnl = ((self._pos_size * (self._entry_price - self._exit_price)) -
                                (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price)))  # pnl is entry-exit-transaction costs
                 # print(self._entry_price)
-                reward += instant_pnl / (self._entry_price)  # instantPNL is actually % increase
+                reward += instant_pnl  # / (self._entry_price * self._pos_size)  # instantPNL is actually % increase
                 self._position = self._positions['flat']  # our position is now flat because we no longer hold anything
                 self._entry_price = 0  # and our entry price resets to 0
             else:  # if we are already long
-                reward -= 0.001  # dont want to hold for too long
+                reward -= 0.00001  # dont want to hold for too long
                 pass  # doesn't matter
         # if we are going short and ...
         elif all(action == self._actions['sell']):
@@ -185,14 +185,14 @@ class TradingEnv(tgym.Env):
             elif all(self._position == self._positions['long']):
                 # We exit at the last closing price
                 self._exit_price = self._prices_history[-1]
-                instant_pnl = (self._pos_size * (-self._entry_price + self._exit_price)) - \
+                instant_pnl = (self._pos_size * (self._exit_price - self._entry_price)) - \
                     (self._trading_fee * self._pos_size * (self._entry_price - self._exit_price))  # pnl is just entry-exit-transaction costs
-                reward += instant_pnl / (self._entry_price)
+                reward += instant_pnl  # / (self._entry_price * self._pos_size)
                 # our position is now flat because we no longer hold anything
                 self._position = self._positions['flat']
                 self._entry_price = 0  # and our entry price resets to 0
             else:  # if we are already short
-                reward -= 0.001
+                reward -= 0.01
                 pass  # nothing happens
 
         elif all(action == self._actions['hold']):  # hold decision
@@ -202,10 +202,10 @@ class TradingEnv(tgym.Env):
             # else:
             #     self._position = self._positions['flat']
             #     reward -= 1
-            reward -= 0.001  # participation penalty
+            reward -= 0.01  # participation penalty
             pass  # Do nothing
         # print(self._last_score)
-        reward -= self._last_score  # reward is just % profit minus difference from perfect strategy
+        # reward -= self._last_score  # reward is just % profit minus difference from perfect strategy
         # print(reward)
         self._total_pnl += instant_pnl  # Total pnl update
         self._total_reward += reward  # Total reward update
