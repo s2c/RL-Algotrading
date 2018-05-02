@@ -6,6 +6,7 @@ import env
 import sqlgen
 # import random
 import pg
+import ddqn
 import numpy as np
 from colorama import Fore, Back, init
 import tensorflow as tf
@@ -17,7 +18,7 @@ init(autoreset=True)
 generatorTrain = sqlgen.SQLStreamer(configFile='config.json',
                                     numDays=5,
                                     YearBegin=2014,
-                                    YearEnd=2015,
+                                    YearEnd=2016,
                                     scrip='RELIANCE')
 
 # Avoid Tensorflow eats up GPU memory
@@ -31,90 +32,110 @@ K.set_session(sess)
 trading_fee = 0.0005
 time_fee = 0.000004
 # history_length number of historical states in the observation vector.
-history_length = 60
-episodes = 30
+history_length = 30
+episodes = 15
 episode_length = 300
 environment = env.TradingEnv(data_generator=generatorTrain,
                              episode_length=episode_length,
                              trading_fee=trading_fee,
                              time_fee=time_fee,
                              history_length=history_length,
-                             stop_loss=-5,
                              pos_size=500,
-                             profit_taken=0)
+                             )
 
 state = environment.reset()
 state_size = len(state)
 action_size = len(environment._actions)
 
 
-agent = pg.A2CAgent(state_size, action_size, history_length)
-agent.actor = Networks.actor_network(state_size, action_size, agent.actor_lr)
-agent.critic = Networks.critic_network(state_size, agent.value_size, agent.critic_lr)
-
+agent = ddqn.DQNAgent(state_size, action_size)  # , history_length)
+batch_size = 100
+pos = 0
+scoreTot = 0
+scoreNeg = 0
 for e in range(episodes):
-    x_t = environment.reset()
-    x_t = np.reshape(x_t, [1, state_size])
+    state = environment.reset()
+    state = np.reshape(state, [1, state_size])
     done = False
     while not done:
-        loss = 0
-        r_t = 0
-        a_t = np.zeros([action_size])
-        # Get action
-        action_idx, policy = agent.act(x_t)
-        a_t[action_idx] = 1
-        x_t, r_t, done, _ = environment.step(a_t)
+        # env.render()
+        action = agent.act(state)
+        next_state, reward, done, _ = environment.step(action)
+        reward = reward if not done else -10
+        next_state = np.reshape(next_state, [1, state_size])
+        agent.remember(state, action, reward, next_state, done)
+        state = next_state
         if done:
-            loss_actor, loss_critic = agent.train_model()
+            # loss = agent.train_model/()
             if environment._total_reward > 0:
-                print(Fore.GREEN + "episode: {}/{}, score: {:.3f}, loss_actor: {:.2f}, loss_critic: {:.2f}"
-                      .format(e, episodes, np.float(environment._total_reward), loss_actor[0], loss_critic[0]))
+                pos += 1
+                scoreTot += environment._total_reward
+                print(Fore.GREEN + "episode: {}/{}, score: {:.3f}"
+                      .format(e, episodes, np.float(environment._total_reward)))
             elif environment._total_reward < 0:
-                print(Fore.RED + "episode: {}/{}, score: {:.3f}, loss_actor: {:.2f}, loss_critic: {:.2f}"
-                      .format(e, episodes, np.float(environment._total_reward), loss_actor[0], loss_critic[0]))
+                scoreNeg += environment._total_reward
+                print(Fore.RED + "episode: {}/{}, score: {:.3f}"
+                      .format(e, episodes, np.float(environment._total_reward)))
             else:
-                print("episode: {}/{}, score: {:.3f}, loss_actor: {:.2.}, loss_critic: {:.2.}"
-                      .format(e, episodes, np.float(environment._total_reward), loss_actor[0], loss_critic[0]))
+                print("episode: {}/{}, score: {:.3f}"
+                      .format(e, episodes, np.float(environment._total_reward)))
             break
-        agent.append_sample(x_t, action_idx, r_t)
-        if e % 50 == 0:
-            loss = agent.save_model("models/a2c")
-
+    if len(agent.memory) > batch_size:
+        agent.replay(batch_size)
+print(pos/episodes)
+print(scoreTot + scoreNeg)
 
 generatorTest = sqlgen.SQLStreamer(configFile='config.json',
                                    numDays=5,
-                                   YearBegin=2016,
+                                   YearBegin=2017,
                                    YearEnd=2017,
                                    scrip='RELIANCE')
-episode_length = 300
-environment = env.TradingEnv(data_generator=generatorTest,
+# episode_length = 300
+environment = env.TradingEnv(data_generator=generatorTrain,
                              episode_length=episode_length,
                              trading_fee=trading_fee,
                              time_fee=time_fee,
                              history_length=history_length,
-                             stop_loss=-5,
                              pos_size=500,
-                             profit_taken=0)
+                             )
 
 # Running the agent
 done = False
 state = environment.reset()
-
+score = 0
 while not done:  # not done:
     # print(state)
+    state = np.reshape(state, [1, state_size])
     try:
-        action, policy = agent.act(state)
+        # print(state)
+        # print(action)
+        action = agent.act(state)
         # print("We're fine")
     except Exception as e:
         print(e)
         print(state.shape)
-    a_t = np.zeros(action_size)
-    print(action)
-    a_t[action] = 1
-    state, _, done, info = environment.step(a_t)
+    # a_t = np.zeros(action_size)
+    # action = np.argmax(action)
+    # print(action)
+#
+    # a_t[action] = 1
+    state, _, done, info = environment.step(action)
     # if 'status' in info and info['status'] == 'Closed plot':
     #     done = True
     if done:
+        score += environment._total_reward
+        print(Fore.CYAN + "Total so far: %f" % (score))
+        # loss = agent.train_model/()
+        if environment._total_reward > 0:
+            print(Fore.GREEN + "score: {:.3f}"
+                  .format(np.float(environment._total_reward)))
+        elif environment._total_reward < 0:
+            print(Fore.RED + "score: {:.3f}"
+                  .format(np.float(environment._total_reward)))
+        else:
+            print("score: {:.3f}"
+                  .format(np.float(environment._total_reward)))
+        print(score)
         state = environment.reset()
         done = False
-    environment.render()
+    # environment.render()
