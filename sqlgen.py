@@ -19,7 +19,10 @@ def randDates(start=2014, end=2017, days=3):
         start = dt.date(start, 3, 3)  # 2014 data starts from 3rd march
     else:
         start = dt.date(start, 1, 1)
-    end = dt.date(end, 12, 31)
+    if end == 2018:
+        end = dt.date(end, 3, 15)
+    else:
+        end = dt.date(end, 12, 31)
     endReduced = end - pd.tseries.offsets.BDay(days)  # we need to leave atleast enough gap as the num of days
     dayRange = len(pd.date_range(start, endReduced, freq=pd.tseries.offsets.BDay()))
     rndStart = np.floor(random.random() * dayRange)

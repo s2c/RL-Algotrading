@@ -3,11 +3,9 @@ import gym
 import numpy as np
 from collections import deque
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, LSTM, Conv1D, Flatten, BatchNormalization
 from keras.optimizers import Adam
 from keras import backend as K
-
-EPISODES = 5000
 
 
 class DQNAgent:
@@ -19,7 +17,7 @@ class DQNAgent:
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.99
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
         self.model = self._build_model()
         self.target_model = self._build_model()
         self.update_target_model()
@@ -32,8 +30,13 @@ class DQNAgent:
     def _build_model(self):
         # Neural Net for Deep-Q learning Model
         model = Sequential()
-        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
-        model.add(Dense(24, activation='relu'))
+        # model.add(LSTM(45, input_dim=self.state_size, activation='relu'))
+        model.add(Conv1D(300, 30, input_shape=(self.state_size,1), activation='relu'))
+        # model.add(Conv1D(150, 15, input_shape=(self.state_size,1), activation='relu'))
+        model.add(Flatten())
+        model.add(Dense(300, activation='relu'))
+        # model.add(Conv1D(120,5))
+        model.add(Dense(300, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
@@ -50,11 +53,15 @@ class DQNAgent:
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         act_values = self.model.predict(state)
+        # print(act_values.shape)
         return np.argmax(act_values[0])  # returns action
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
+            # print(state)
+            # print(state.shape)
+            # print(action)
             target = self.model.predict(state)
             if done:
                 target[0][action] = reward

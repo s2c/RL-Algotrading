@@ -48,7 +48,9 @@ class TradingEnv(tgym.Env):
                  time_fee=0.00004,
                  history_length=2,
                  max_hold=200,
-                 pos_size=500):
+                 pos_size=500,
+                 profit_taken=2.5,
+                 stop_loss=4):
         """
         Init Function
         data_generator: self explanatory. Generates data for the
@@ -76,6 +78,8 @@ class TradingEnv(tgym.Env):
         self._epiCounter = 0
         self._max_hold = max_hold
         self._spread_coefficients = [pos_size]
+        self._profit_taken = profit_taken
+        self._stop_loss = -stop_loss
 
         self.reset()
 
@@ -113,28 +117,57 @@ class TradingEnv(tgym.Env):
 
         if self._position == self._positions['long']:
             self._trade_duration += 1
-            reward = (self._prices_history[-1] - self._entry_price) * (self._trade_duration / self._max_hold)
-            reward = reward - (reward * self._trading_fee)
+            actPrice = self._prices_history[-1] - self._prices_history[-1] * self._trading_fee
+            rewardBase = (actPrice - self._entry_price)
+            if rewardBase > self._profit_taken:
+                return self.calc_close(rewardBase)
+            elif rewardBase < self._stop_loss:
+                return self.calc_close(rewardBase)
+            else:
+                reward = rewardBase * (self._trade_duration / self._max_hold)
+
         elif self._position == self._positions['short']:
             self._trade_duration += 1
-            reward = -1 * (self._prices_history[-1] - self._entry_price) * (self._trade_duration / self._max_hold)
-            reward = reward - (reward * self._trading_fee)
+            actPrice = self._prices_history[-1] + (self._prices_history[-1] * self._trading_fee)
+            rewardBase = -1 * (actPrice - self._entry_price)
+            if rewardBase > self._profit_taken:
+                return self.calc_close(rewardBase)
+            elif rewardBase < self._stop_loss:
+                return self.calc_close(rewardBase)
+            else:
+                reward = rewardBase * (self._trade_duration / self._max_hold)
 
+        # if reward > 0:
+        #     reward  = 1
+        # else:
+        #     reward = -1
+        # reward = 0
+        # print("here")
+        # if reward > 1 or reward < -1:
+        #     # print(reward, "HOLDING")
+        #     return reward*self._pos_size*(5*reward/2.5)
+        # else:
+        #     # print(reward, "BASIC HOLDING")
         return reward * self._pos_size
 
     def calc_close(self, reward):
 
         if self._position == self._positions['long']:
-            reward = (self._prices_history[-1] - self._entry_price)
-            reward = reward - (reward * self._trading_fee)
+            actPrice = self._prices_history[-1] - self._prices_history[-1] * self._trading_fee
+            reward = (actPrice - self._entry_price)
         elif self._position == self._positions['short']:
-            reward = -1 * (self._prices_history[-1] - self._entry_price)
-            reward = reward - (reward * self._trading_fee)
+            actPrice = self._prices_history[-1] + self._prices_history[-1] * self._trading_fee
+            reward = -1 * (actPrice - self._entry_price)
 
         self._trade_duration = 0
         self._entry_price = 0
         self._position = self._positions['flat']
+        self._total_pnl += reward * self._pos_size
 
+        # if reward > 1 or reward < -1:
+        #     # print(reward , "CLOSING")
+        #     return reward*self._pos_size*(5*reward/2.5)
+        # else:
         return reward * self._pos_size
 
     def step(self, action):
@@ -157,9 +190,11 @@ class TradingEnv(tgym.Env):
         reward = 0  # reward this round
         info = {}
         # print(action)
-        if action == self._actions['hold']:
+        if self._trade_duration > self._max_hold:
+            reward = self.calc_close(reward)
+        elif action == self._actions['hold']:
             reward = self.calc_holding(reward)
-        if action == self._actions['buy']:
+        elif action == self._actions['buy']:
             if self._position == self._positions['long']:
                 reward = self.calc_holding(reward)
             elif self._position == self._positions['short']:
@@ -167,7 +202,11 @@ class TradingEnv(tgym.Env):
             elif self._position == self._positions['flat']:
                 self._position = self._positions['long']
                 self._entry_price = self._prices_history[-1]
-        if action == self._actions['sell']:
+                # print(self._entry_price)
+                self._entry_price += self._entry_price * self._trading_fee
+                # print(self._entry_price)
+                # print("END")
+        elif action == self._actions['sell']:
             # print("here")
             if self._position == self._positions['short']:
                 reward = self.calc_holding(reward)
@@ -176,11 +215,14 @@ class TradingEnv(tgym.Env):
             elif self._position == self._positions['flat']:
                 self._position = self._positions['short']
                 self._entry_price = self._prices_history[-1]
+                # print(self._entry_price)
+                self._entry_price -= self._entry_price * self._trading_fee
+                # print(self._entry_price)
 
         instant_pnl = reward
         if self._trade_duration == 0:
             reward -= 0  # increase to encourage longer trades
-        self._total_pnl += instant_pnl  # Total pnl update
+        # self._total_pnl += instant_pnl  # Total pnl update
         self._total_reward += reward  # Total reward update
 
         # Game over logic
@@ -278,10 +320,21 @@ class TradingEnv(tgym.Env):
         # print(prices)
         # print(self._position)
         # print(self._entry_price)
+        priceMax = max(prices)
+        priceMin = min(prices)
         prices = skp.minmax_scale(prices)
+        ePrice = 0
+        if self._entry_price != 0:
+            ePrice = (self._entry_price - priceMin) / (priceMax - priceMin)
+        else:
+            ePrice = 0
         # print(prices)
 
         return np.concatenate((np.array(prices),
-                               [self._entry_price],
+                               # [self._prices_history[-1]],
+                               # [priceMax],
+                               # [priceMin],
+                               [ePrice],
+                               # [self._entry_price],
                                [self._position],
                                [self._trade_duration]))
